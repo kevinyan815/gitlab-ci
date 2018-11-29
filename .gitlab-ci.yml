@@ -1,0 +1,130 @@
+stages:
+  - build
+  - test
+  - deploy
+
+before_script:
+  - mkdir -p ~/.ssh
+  - echo "$SSH_PRIVATE_KEY" | tr -d '\r'  > /root/.ssh/id_rsa
+  - chmod -R 600 ~/.ssh
+  - echo "$SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts #make sure remote servers's ssh host keys  are verified
+  - chmod 644 ~/.ssh/known_hosts
+  - mkdir -p /etc/ansible
+  - echo -e "xx.xx.xxx.xxx db_master\nxx.xx.xxx.xxx db_slave" >> /etc/hosts # #this let container have access to mysql server
+
+
+# cache vendor packages between jobs
+cache:
+  key: ${CI_COMMIT_REF_SLUG}
+  paths:
+    - vendor/
+
+# environment variables set for services
+variables:
+  MYSQL_DATABASE: project_database_name
+  MYSQL_USER: homestead
+  MYSQL_PASSWORD: secret
+  MYSQL_ROOT_PASSWORD: secret
+
+# the 'pages' job will deploy and build your site to the 'public' path
+pages:
+  stage: deploy
+  script:
+  - pushd wiki && gitbook build ./ ../public/wiki && popd
+  - apidoc -i app/Http/Controllers/ -o public/apidoc -t apidoc/template/
+  - phpcs app --report=source --standard=PSR2 >> public/phpcs_source.html || echo "success"
+  - phpcs app --standard=PSR2 >> public/phpcs.html || echo "success"
+  - phpcs app --report=diff --standard=PSR2 >> public/phpcs_diff.diff || echo "success"
+  - diff2html -i file -d char -s side -F public/phpcs_diff.html -- public/phpcs_diff.diff || echo "success"
+  - phpmd app  html codesize,unusedcode,naming >> public/phpmd_Model.html || echo "success"
+  artifacts:
+    paths:
+      - public
+  only:
+    - master
+    - develop
+  tags:
+    - your-runner-tag
+
+build:
+  stage: build
+  image: kevinyan001/git-runner:php7.1-node10
+  script:
+    - /usr/local/bin/composer install
+  only:
+    - develop
+    - uat
+  tags:
+    - your-runner-tag
+
+test-dev:
+  stage: test
+  image: kevinyan001/git-runner:php7.1-node10
+  services:
+    - mysql:5.7
+  script:
+    - php artisan migrate:refresh --seed
+    - ./vendor/bin/phpunit
+  only:
+    - develop
+  tags:
+    - your-runner-tag
+
+test-uat:
+  stage: test
+  image: kevinyan001/git-runner:php7.1-node10
+  services:
+    - mysql:5.7
+  script:
+    - cp .env.uat .env
+    - php artisan migrate:refresh --seed
+    - ./vendor/bin/phpunit
+  only:
+    - uat
+  tags:
+    - your-runner-tag
+
+
+deploy-testing:
+  stage: deploy
+  image: kevinyan001/git-runner:php7.1-node10
+  variables: # set env variables, then job container can connect to the mysql service
+    DB_HOST: mysql
+    DB_PORT: '3306'
+    DB_DATABASE: project_database_name
+    DB_USERNAME: homestead
+    DB_PASSWORD: secret
+  script:
+    - php artisan migrate --force # sync database structure to dev mysql server
+    - rsync -az --delete --exclude=.git --exclude=.gitignore --exclude=.gitlab-ci.yml ./ $SERVER_TOKEN_TEST:$WEB_ROOT_TEST
+    - ssh $SERVER_TOKEN_TEST -t "chown -R www:www ${WEB_ROOT_TEST}"
+  environment:
+    name: test
+    url: http://test.example.com
+  only:
+    - develop
+  tags:
+    - your-runner-tag
+
+deploy-uat:
+  stage: deploy
+  image: kevinyan001/git-runner:php7.1-node10
+  variables:
+    DB_HOST: mysql
+    DB_PORT: '3306'
+    DB_DATABASE: project_database_name
+    DB_USERNAME: homestead
+    DB_PASSWORD: secret
+  script:
+    - cp .env.uat .env
+    - php artisan migrate --force # sync database structure in uat mysql server
+    - rsync -az --delete --exclude=.git --exclude=.gitignore --exclude=.gitlab-ci.yml ./ $SERVER_TOKEN_UAT:$WEB_ROOT_UAT
+    - ssh $SERVER_TOKEN_UAT -t "chown -R www:www ${WEB_ROOT_UAT}"
+  environment:
+    name: uat
+    url: http://uat.example.com
+  when: manual
+  only:
+    - uat
+  tags:
+    - your-runner-tag
