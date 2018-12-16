@@ -128,3 +128,44 @@ deploy-uat:
     - uat
   tags:
     - your-runner-tag
+    
+ build-prod:
+  stage: build
+  image: kevinyan001/git-runner:php7.1-node10
+  cache:
+    key: ${CI_COMMIT_REF_SLUG}-${CI_COMMIT_SHA}
+    paths:
+      - vendor/
+  script:
+    - cp .env.master .env
+    - /usr/local/bin/composer install
+    - php artisan route:cache; php artisan config:cache; php artisan optimize --force;
+  only:
+    - release
+  tags:
+    - prod_runner01
+
+deploy-prod:
+  stage: deploy
+  image: kevinyan001/git-runner:php7.1-node10
+  cache:
+    key: ${CI_COMMIT_REF_SLUG}-${CI_COMMIT_SHA}
+    paths:
+      - vendor/
+  variables:
+    ANSIBLE_NO_LOG: 'true'
+  environment:
+    name: ci_test
+    url: http://prod.example.com
+  when: manual
+  script:
+    - cp .env.master .env
+    - php artisan migrate --force
+    - ansible cube-prod -u www -m synchronize -a "src=${CI_PROJECT_DIR}/ dest=${WEB_ROOT_PROD} delete=yes archive=yes rsync_opts='--exclude=.git*'"
+    - ansible cube-prod -u www -m command -a "sudo su -c 'chmod -R 744 ${WEB_ROOT_PROD}'"
+    - ansible cube-prod -u www -m command -a "php-fpm reload"
+    - ssh $SERVER_TOKEN_PROD -t "sudo su -c 'supervisorctl -c /etc/supervisord.conf reload'"
+  only:
+    - ci_test
+  tags:
+    - prod_runner01
