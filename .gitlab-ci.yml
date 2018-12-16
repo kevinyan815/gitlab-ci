@@ -133,7 +133,9 @@ deploy-uat:
   stage: build
   image: kevinyan001/git-runner:php7.1-node10
   cache:
-    key: ${CI_COMMIT_REF_SLUG}-${CI_COMMIT_SHA}
+    # make sure every deployment to prod server has a unique cache key , otherwise rollback action may use different building cache
+    # other than cache this deployment related build job created.
+    key: ${CI_COMMIT_REF_SLUG}-${CI_COMMIT_SHA} # make sure every deployment to prod server has a unique cache key , otherwise rollback execution may use different build cache other than this deployment related build job created 
     paths:
       - vendor/
   script:
@@ -149,6 +151,7 @@ deploy-prod:
   stage: deploy
   image: kevinyan001/git-runner:php7.1-node10
   cache:
+    # cache key must be consistent with the value set in build-prod job.
     key: ${CI_COMMIT_REF_SLUG}-${CI_COMMIT_SHA}
     paths:
       - vendor/
