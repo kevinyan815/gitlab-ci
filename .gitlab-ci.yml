@@ -135,7 +135,7 @@ deploy-uat:
   cache:
     # make sure every deployment to prod server has a unique cache key , otherwise rollback action may use different building cache
     # other than cache this deployment related build job created.
-    key: ${CI_COMMIT_REF_SLUG}-${CI_COMMIT_SHA} # make sure every deployment to prod server has a unique cache key , otherwise rollback execution may use different build cache other than this deployment related build job created 
+    key: ${CI_COMMIT_REF_SLUG}-${CI_COMMIT_SHA}
     paths:
       - vendor/
   script:
