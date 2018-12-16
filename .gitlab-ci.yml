@@ -158,7 +158,7 @@ deploy-prod:
   variables:
     ANSIBLE_NO_LOG: 'true'
   environment:
-    name: ci_test
+    name: release
     url: http://prod.example.com
   when: manual
   script:
