@@ -169,6 +169,6 @@ deploy-prod:
     - ansible cube-prod -u www -m command -a "php-fpm reload"
     - ssh $SERVER_TOKEN_PROD -t "sudo su -c 'supervisorctl -c /etc/supervisord.conf reload'"
   only:
-    - ci_test
+    - release
   tags:
     - prod_runner01
